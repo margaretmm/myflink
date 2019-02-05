@@ -23,16 +23,23 @@ import com.dataartisans.flinktraining.exercises.datastream_java.utils.SimplePred
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
+import org.apache.flink.api.common.state.ListState;
+import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.util.Collector;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import static java.lang.Math.abs;
 
 public class OccupancyDataWashForLR {
 
@@ -53,8 +60,9 @@ public class OccupancyDataWashForLR {
 		DataStream<String> modDataStrForLR = DsOccupancy
 				.map(new mapTime()).keyBy(0)
 				.flatMap(new NullTempFillMean()).keyBy(0)
-				.flatMap(new HumidityPridict()).keyBy(0)///使用HumidityRatio 预测THumidity因为相关性大
-				.flatMap(new HumidityRatioPridict())//使用Humidity 预测THumidityRatio因为相关性大
+//				.flatMap(new HumidityPridict()).keyBy(0)///使用HumidityRatio 预测THumidity因为相关性大
+//				.flatMap(new HumidityRatioPridict())//使用Humidity 预测THumidityRatio因为相关性大
+				.flatMap(new HumidityAndRedioPridict())
 				.flatMap(new OccupyFlatMapForLR());
 		modDataStrForLR.print();
 		modDataStrForLR.writeAsText("./OccupyDataForLR");
@@ -125,9 +133,7 @@ public class OccupancyDataWashForLR {
 			// obtain key-value state for prediction model
 			ValueStateDescriptor<SimplePredictionModel> descriptor =
 					new ValueStateDescriptor<>(
-							// state name
 							"regressionModel",
-							// type information of state
 							TypeInformation.of(SimplePredictionModel.class));
 			modelState = getRuntimeContext().getState(descriptor);
 		}
@@ -140,20 +146,20 @@ public class OccupancyDataWashForLR {
 		@Override
 		public void flatMap(Tuple2<Long, DataOccupancy>  val, Collector<Tuple2<Long, DataOccupancy>> out) throws Exception {
 
-			SimplePredictionModel HumidityRatioPridictModel = modelState.value();
-			if (HumidityRatioPridictModel == null) {
-				HumidityRatioPridictModel = new SimplePredictionModel();
+			SimplePredictionModel HumidityPridictModel = modelState.value();
+			if (HumidityPridictModel == null) {
+				HumidityPridictModel = new SimplePredictionModel();
 			}
 			DataOccupancy occupancy = val.f1;
 
-			if(occupancy.Humidity != null && occupancy.HumidityRatio== null){
-				occupancy.HumidityRatio = HumidityRatioPridictModel.predictY(occupancy.Humidity);
+			if(occupancy.HumidityRatio != null && occupancy.Humidity== null){
+				occupancy.Humidity = HumidityPridictModel.predictY(occupancy.HumidityRatio);
 				out.collect(new Tuple2<>(val.f0,occupancy));
 			}
 			else {
 				if(occupancy.Humidity != null && occupancy.HumidityRatio != null) {
-					HumidityRatioPridictModel.refineModel(occupancy.Humidity, occupancy.HumidityRatio);
-					modelState.update(HumidityRatioPridictModel);
+					HumidityPridictModel.refineModel(occupancy.HumidityRatio, occupancy.Humidity);
+					modelState.update(HumidityPridictModel);
 					out.collect(new Tuple2<>(val.f0,occupancy));
 				}else{
 					//log Humidity,HumidityRatio are both null
@@ -175,6 +181,64 @@ public class OccupancyDataWashForLR {
 		}
 	}
 
+
+	public static class HumidityAndRedioPridict extends RichFlatMapFunction<Tuple2<Long, DataOccupancy> , DataOccupancy> {
+
+		private transient ListState<SimplePredictionModel> modelStates;
+		private List<SimplePredictionModel> models;
+
+		@Override
+		public void flatMap(Tuple2<Long, DataOccupancy>  val, Collector<DataOccupancy> out) throws Exception {
+			Iterator<SimplePredictionModel> modStateLst = modelStates.get().iterator();
+			SimplePredictionModel HumidityPridictModel=null;
+			SimplePredictionModel HumidityRatioPridictModel=null;
+
+			if(!modStateLst.hasNext()){
+				HumidityPridictModel = new SimplePredictionModel();
+				HumidityRatioPridictModel = new SimplePredictionModel();
+			}else{
+//				while(modStateLst.hasNext()) {
+//					System.out.println(modStateLst.next());
+//				}
+				HumidityPridictModel=modStateLst.next();
+				HumidityRatioPridictModel=modStateLst.next();
+			}
+
+			models= new ArrayList<SimplePredictionModel>();
+			models.add(HumidityPridictModel);
+			models.add(HumidityRatioPridictModel);
+
+			DataOccupancy occupancy = val.f1;
+			if(occupancy.HumidityRatio != null && occupancy.Humidity== null){
+				occupancy.Humidity = HumidityPridictModel.predictY(occupancy.HumidityRatio);
+				out.collect(occupancy);
+			}else if(occupancy.Humidity != null && occupancy.HumidityRatio== null){
+				occupancy.HumidityRatio = HumidityRatioPridictModel.predictY(occupancy.Humidity);
+				out.collect(occupancy);
+			}else if(occupancy.Humidity != null && occupancy.HumidityRatio != null) {
+					HumidityRatioPridictModel.refineModel(occupancy.Humidity, occupancy.HumidityRatio);
+					modelStates.update(models);
+					out.collect(occupancy);
+			}else{
+				//log Humidity,HumidityRatio are both null
+				System.out.println("~~~~~!Humidity,HumidityRatio are both null");
+			}
+
+		}
+
+		@Override
+		public void open(Configuration config) {
+			// obtain key-value state for prediction model
+			ListStateDescriptor<SimplePredictionModel> descriptor =
+					new ListStateDescriptor<>(
+							// state name
+							"regressionModel",
+							// type information of state
+							SimplePredictionModel.class);
+			modelStates = getRuntimeContext().getListState(descriptor);
+		}
+	}
+
 	public static class NullTempFillMean extends RichFlatMapFunction<Tuple2<Long, DataOccupancy> , Tuple2<Long, DataOccupancy>> {
 
 		private transient ValueState<Double> TemperatureMeanState;
@@ -189,12 +253,17 @@ public class OccupancyDataWashForLR {
 			}
 			if(occupancy.Temp == null){
 				occupancy.Temp= TemperatureMean;
-			}else
+				out.collect(new Tuple2<>(val.f0,occupancy));
+			}else if(abs(occupancy.Temp -TemperatureMean) > 8){
+				// log exception temp
+			}
+			else
 			{
 				TemperatureMean=(TemperatureMean+occupancy.Temp)/2;
 				TemperatureMeanState.update(TemperatureMean);
+				out.collect(new Tuple2<>(val.f0,occupancy));
 			}
-			out.collect(new Tuple2<>(val.f0,occupancy));
+
 		}
 
 		@Override
