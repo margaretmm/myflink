@@ -2,6 +2,10 @@ This repository contains reference solutions and utility classes for the Flink T
 on [http://training.data-artisans.com](http://training.data-artisans.com).
 # myflink
 
+
+https://www.cnblogs.com/029zz010buct/p/9774295.html
+
+
 --------------需求总表
 1	监控覆盖需求	提高监控覆盖率，目标：apigw入口核心产品线0,1,2,3级故障监控无遗漏
 apigw入口核心产品线场景接口监控全覆盖	  基于静态/动态基线加配置阈值的方式监控apigw入口核心业务场景接口指标（主要包括四个黄金指标平均响应时间，错误率，每分钟错误数和吞吐率）  高
