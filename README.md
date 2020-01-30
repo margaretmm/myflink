@@ -6,6 +6,7 @@ on [http://training.data-artisans.com](http://training.data-artisans.com).
 https://www.cnblogs.com/029zz010buct/p/9774295.html
 
 k8s operator:https://blog.gmem.cc/crd
+https://mp.weixin.qq.com/s?__biz=MzIwNDIzODExOA%3D%3D&chksm=8ec1c4aab9b64dbc088d439305c15097c3294f5f6959188cfb7970af3a42f3c87ac5aa09df2c&idx=1&mid=2650167523&scene=21&sn=3939067e4f34c78d1e180b012e8a88f5
 
 --------------需求总表
 1	监控覆盖需求	提高监控覆盖率，目标：apigw入口核心产品线0,1,2,3级故障监控无遗漏
