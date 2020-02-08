@@ -8,7 +8,7 @@ https://www.cnblogs.com/029zz010buct/p/9774295.html
 k8s operator:
 https://blog.gmem.cc/crd
 https://blog.csdn.net/weixin_41806245/article/details/94451734
-
+https://zhuanlan.zhihu.com/p/52367044
 
 sidecar :
 https://segmentfault.com/a/1190000021394687?utm_source=tag-newest
