@@ -147,3 +147,44 @@ http错误率
 3. 过滤部分status字段值（黑名单机制，可按接口维度配置）
 4. 错误率（%）=sum（过滤后status的值非5XX的请求）/总请求数
 http每分钟错误数	
+
+
+if __name__ == '__main__':
+    start_http_server(5000)
+    try:
+        grpcServer = threading.Thread(target=grpc_serve, args=("127.0.0.1",'50050',))
+        grpcServer.start()
+    except:
+        print("Error: 无法启动线程")
+
+    while True:
+        print(rule.GMyRule.MonitorApp,rule.GMyRule.MonitorFile)
+        time.sleep(5)
+        get_disk_usage(rule.GMyRule.DiskFlag)
+        get_jvm_info(rule.GMyRule.JVMFlag)
+        get_log_info(rule.GMyRule.MonitorFile)
+     
+············
+ class RuleReciver(RuleReciverServicer):
+    def ReciveRule(self, request, context):
+        GMyRule.MonitorApp=request.ruleBody.MonitorApp
+        GMyRule.MonitorType=request.ruleBody.MonitorType
+        GMyRule.MonitorPort=request.ruleBody.MonitorPort
+        GMyRule.MonitorFile=request.ruleBody.MonitorFile
+        GMyRule.MonitorFileKeyword=request.ruleBody.MonitorFileKeyword
+
+        print("RuleReciver server received rulename :{0},MonitorApp:{1} " ,request.ruleName,GMyRule.MonitorApp)
+        return RuleReply(ruleName=request.ruleName,podName=request.podName,retCode=0)
+
+
+def grpc_serve(host, port):
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
+    add_RuleReciverServicer_to_server(RuleReciver(), server)
+    #addr='[::]:'+port
+    server.add_insecure_port("{0}:{1}".format(host, port))
+    server.start()
+    try:
+        while True:
+            time.sleep(_ONE_DAY_IN_SECONDS)
+    except KeyboardInterrupt:
+        server.stop(0)
